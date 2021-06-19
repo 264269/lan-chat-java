@@ -7,7 +7,6 @@ import java.util.regex.Pattern;
 
 
 public class ChatServerObj {
-    private static final String sourceDir = Paths.get("").toAbsolutePath().toString() + "\\sources";
 
     //    client list
     private static LinkedList<ClientHandler> clientList = new LinkedList<>();
@@ -20,16 +19,15 @@ public class ChatServerObj {
         private String username = null;
 
         //        some Stringy things
-        private static final String REGISTRATION = "/register";
-        private static final String GROUP = "/g";
-        private static final String WHISPER = "/w";
-        private static final String QUIT = "/q";
-        private static final String USERS = "/users";
-        private static final String DOWNLOAD = "/download";
-        private static final String UPLOAD = "/upload";
-        private static final String FILES = "/files";
-        private static final String ACCEPTED = "accepted";
-        private static final String REFUSED = "refused";
+        public static final String REGISTRATION = "/register";
+        public static final String GROUP = "/g";
+        public static final String WHISPER = "/w";
+        public static final String QUIT = "/q";
+        public static final String USERS = "/users";
+        public static final String DOWNLOAD = "/download";
+        public static final String UPLOAD = "/upload";
+        public static final String FILES = "/files";
+        public static final String REFUSED = "refused";
 
 
         //        constructor
@@ -50,94 +48,132 @@ public class ChatServerObj {
                     while (!client.isClosed()) {
                         msg = (Message) in.readObject();
                         msg.setFromUser(this.username);
-                        switch (msg.getCommand().toLowerCase(Locale.ROOT)) {
-                            case (REGISTRATION) -> {
-                                if (this.isRegistered()) {
-                                    Message result = Message.serverMessage("You are already registered.");
-                                    result.setToUser(this.getUsername());
-                                    this.sendMsgToClient(result);
-                                    break;
+                        try {
+                            switch (msg.getCommand().toLowerCase(Locale.ROOT)) {
+                                case (REGISTRATION) -> {
+                                    if (this.isRegistered()) {
+                                        Message result = Message.serverMessage("You are already registered.");
+                                        result.setToUser(this.getUsername());
+                                        this.sendMsgToClient(result);
+                                        break;
+                                    }
+                                    String username = msg.getContent().replaceAll("\\s*", "");
+                                    if (registerUser(username)) {
+                                        Message result = Message.serverMessage("Registration complete! Your username: " + username);
+                                        result.setToUser(this.getUsername());
+                                        this.sendMsgToClient(result);
+                                    } else {
+                                        this.sendMsgToClient(Message.serverMessage("Error! Please, try again."));
+                                    }
                                 }
-                                if (msg.getContent().isBlank()) {
-                                    this.sendMsgToClient(Message.serverMessage("What kind of idiot are you?"));
-                                    break;
+                                case (GROUP) -> {
+                                    if (!this.isRegistered()) {
+                                        Message result = Message.serverMessage("Permitted! You are not registered.");
+                                        this.sendMsgToClient(result);
+                                        break;
+                                    }
+                                    groupChat(msg);
                                 }
-                                String username = msg.getContent().replaceAll("\\s*", "");
-                                if (registerUser(username)) {
-                                    Message result = Message.serverMessage("Registration complete! Your username: " + username);
-                                    result.setToUser(this.getUsername());
-                                    this.sendMsgToClient(result);
-                                } else {
-                                    this.sendMsgToClient(Message.serverMessage("Error! Please, try again."));
+                                case (WHISPER) -> {
+                                    if (!this.isRegistered()) {
+                                        Message result = Message.serverMessage("Permitted! You are not registered.");
+                                        result.setToUser(this.username);
+                                        this.sendMsgToClient(result);
+                                        break;
+                                    }
+                                    if (msg.getToUser().equalsIgnoreCase(this.username)) {
+                                        Message result = Message.serverMessage("Stop it.");
+                                        result.setToUser(this.username);
+                                        sendMsgToClient(result);
+                                        break;
+                                    }
+                                    ClientHandler toClient = getByUsername(msg.getToUser());
+                                    if (toClient == null) {
+                                        Message result = Message.serverMessage("Can't find such user.");
+                                        result.setToUser(this.username);
+                                        this.sendMsgToClient(result);
+                                        break;
+                                    }
+                                    toClient.sendMsgToClient(msg);
+                                    sendMsgToClient(msg);
                                 }
-                            }
-                            case (GROUP) -> {
-                                if (!this.isRegistered()) {
-                                    Message result = Message.serverMessage("Permitted! You are not registered.");
-                                    this.sendMsgToClient(result);
-                                    break;
+                                case (QUIT) -> {
+                                    Message resultToUser = Message.serverMessage("You're going to be disconnected.");
+                                    resultToUser.setToUser(this.username);
+                                    this.sendMsgToClient(resultToUser);
+                                    deleteClient(this.getPort());
+                                    in.close();
+                                    out.close();
+                                    client.close();
+                                    if (this.isRegistered()) {
+                                        Message resultToChat = Message.serverMessage("User " + this.username + " is off-line.");
+                                        groupChat(resultToChat);
+                                    }
                                 }
-                                if (msg.getContent() == null || (msg.getContent().isBlank()) || (msg.getContent().isEmpty())) {
-                                    Message result = Message.serverMessage("Permitted! No content.");
+                                case (USERS) -> {
+                                    Message result = Message.serverMessage(getAllUsernames());
                                     result.setToUser(this.username);
                                     this.sendMsgToClient(result);
-                                    break;
                                 }
-                                groupChat(msg);
-                            }
-                            case (WHISPER) -> {
-                                if (!this.isRegistered()) {
-                                    Message result = Message.serverMessage("Permitted! You are not registered.");
-                                    result.setToUser(this.username);
-                                    this.sendMsgToClient(result);
-                                    break;
-                                }
-                                if ((msg.getContent().split("\\s*").length < 2) || (msg.getContent().isBlank()) || (msg.getContent().isEmpty())) {
-                                    Message result = Message.serverMessage("Permitted! Missing username/content.");
-                                    result.setToUser(this.username);
-                                    this.sendMsgToClient(result);
-                                    break;
-                                }
-                                msg.setToUser(msg.getContent().split(" ")[0]);
-                                if (msg.getToUser().equalsIgnoreCase(this.username)) {
-                                    Message result = Message.serverMessage("Stop it.");
+                                case (FILES) -> {
+                                    if (!this.isRegistered()) {
+                                        Message result = Message.serverMessage("Permitted! You are not registered.");
+                                        this.sendMsgToClient(result);
+                                        break;
+                                    }
+                                    Message result = Message.serverMessage(FileServer.getFileList());
                                     result.setToUser(this.username);
                                     sendMsgToClient(result);
-                                    break;
                                 }
-                                msg.setContent(msg.getContent().replaceFirst(msg.getToUser(), "").replaceFirst("\\s*", ""));
-                                ClientHandler toClient = getByUsername(msg.getToUser());
-                                if (toClient == null) {
-                                    Message result = Message.serverMessage("Can't find such user.");
-                                    result.setToUser(this.username);
-                                    this.sendMsgToClient(result);
-                                    break;
+                                case (DOWNLOAD) -> {
+                                    if (!this.isRegistered()) {
+                                        Message result = Message.serverMessage("Permitted! You are not registered.");
+                                        this.sendMsgToClient(result);
+                                        break;
+                                    }
+                                    if (FileServer.checkFiles(msg.getContent(), true)) {
+                                        Message result = Message.serverMessage(msg.getContent());
+                                        result.setCommand(DOWNLOAD);
+                                        result.setToUser(this.username);
+                                        result.setSystem(true);
+                                        this.sendMsgToClient(result);
+                                    } else {
+                                        Message result = Message.serverMessage(null);
+                                        result.setCommand(REFUSED);
+                                        result.setToUser(this.username);
+                                        result.setSystem(true);
+                                        this.sendMsgToClient(result);
+                                    }
                                 }
-                                toClient.sendMsgToClient(msg);
-                                sendMsgToClient(msg);
-                            }
-                            case (QUIT) -> {
-                                deleteClient(this.getPort());
-                                Message resultToUser = Message.serverMessage("You've been disconnected.");
-                                resultToUser.setToUser(this.username);
-                                in.close();
-                                out.close();
-                                client.close();
-                                if (this.isRegistered()) {
-                                    Message resultToChat = Message.serverMessage("User " + this.username + " is off-line.");
-                                    groupChat(resultToChat);
+                                case (UPLOAD) -> {
+                                    if (!this.isRegistered()) {
+                                        Message result = Message.serverMessage("Permitted! You are not registered.");
+                                        this.sendMsgToClient(result);
+                                        break;
+                                    }
+                                    if (FileServer.checkFiles(msg.getContent(), false)) {
+                                        Message result = Message.serverMessage(msg.getContent());
+                                        result.setCommand(UPLOAD);
+                                        result.setToUser(this.username);
+                                        result.setSystem(true);
+                                        this.sendMsgToClient(result);
+                                    } else {
+                                        Message result = Message.serverMessage(null);
+                                        result.setCommand(REFUSED);
+                                        result.setToUser(this.username);
+                                        result.setSystem(true);
+                                        this.sendMsgToClient(result);
+                                    }
+                                }
+                                default -> {
+                                    throw new IllegalArgumentException("No such command.");
+
                                 }
                             }
-                            case (USERS) -> {
-                                Message result = Message.serverMessage(getAllUsernames());
-                                result.setToUser(this.username);
-                                this.sendMsgToClient(result);
-                            }
-                            default -> {
-                                Message result = Message.serverMessage("No such command.");
-                                result.setToUser(this.username);
-                                this.sendMsgToClient(result);
-                            }
+                        } catch (Exception e) {
+                            Message result = Message.serverMessage("Error occurred on server - " + e.getMessage());
+                            result.setToUser(this.username);
+                            this.sendMsgToClient(result);
                         }
                     }
                 } catch (IOException e) {
@@ -170,15 +206,23 @@ public class ChatServerObj {
                     """);
             return Message.serverMessage(welcome);
         }
+
+        public boolean isRegistered(){
+            return (username != null);
+        }
+
         public boolean isClosed(){
             return client.isClosed();
         }
+
         public String getUsername(){
             return username;
         }
+
         public int getPort() {
             return client.getPort();
         }
+
         public boolean registerUser(String name){
             if (name.equalsIgnoreCase("null")){
                 return false;
@@ -197,9 +241,6 @@ public class ChatServerObj {
             username = name;
             return true;
         }
-        public boolean isRegistered(){
-            return (username != null);
-        }
         private void groupChat(Message msg) {
             msg.setToUser("everyone on server");
             for (ClientHandler client : clientList) {
@@ -210,6 +251,7 @@ public class ChatServerObj {
                 }
             }
         }
+
         public String getAllUsernames() {
             StringBuilder userList = new StringBuilder();
             userList.append("Users online: ").append(clientList.toArray().length);
@@ -219,10 +261,12 @@ public class ChatServerObj {
             }
             return userList.toString();
         }
+
         private void sendMsgToClient(Message msg) throws IOException {
             out.writeObject(msg);
             out.flush();
         }
+
         static public ClientHandler getByUsername(String name){
             for (ClientHandler client : clientList){
                 if (name.equalsIgnoreCase(client.getUsername())){
@@ -231,16 +275,23 @@ public class ChatServerObj {
             }
             return null;
         }
+
     }
 
     private static void deleteClient(int deleteClientPort) {
-        clientList.removeIf(client -> client.getPort() == deleteClientPort);
+        if (clientList.removeIf(client -> client.getPort() == deleteClientPort)) {
+            System.out.println("Client with port " + deleteClientPort + " was deleted.");
+        } else {
+            System.out.println("Client wasn't deleted.");
+        }
     }
     private static void clearServer(){
         clientList.removeIf(ClientHandler::isClosed);
     }
+
     public static void main(String[] args) throws IOException {
         int serverPort = 6666;
+        FileServer fileServer = new FileServer(4004);
         try (ServerSocket serverSocket = new ServerSocket(serverPort, 10)) {
             while (true) {
                 clearServer();
