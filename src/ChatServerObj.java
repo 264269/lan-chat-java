@@ -1,6 +1,5 @@
 import java.io.*;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.net.*;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -19,15 +18,6 @@ public class ChatServerObj {
         private String username = null;
 
         //        some Stringy things
-        public static final String REGISTRATION = "/register";
-        public static final String GROUP = "/g";
-        public static final String WHISPER = "/w";
-        public static final String QUIT = "/q";
-        public static final String USERS = "/users";
-        public static final String DOWNLOAD = "/download";
-        public static final String UPLOAD = "/upload";
-        public static final String FILES = "/files";
-        public static final String REFUSED = "refused";
 
 
         //        constructor
@@ -44,16 +34,19 @@ public class ChatServerObj {
             Message msg;
             try {
                 try {
-                    sendMsgToClient(welcomeMsg());
+                    Message encounter = Message.serverMessage("Type /commands.");
+                    encounter.setCommand(Message.COMMANDS);
+                    sendMsgToClient(encounter);
                     while (!client.isClosed()) {
                         msg = (Message) in.readObject();
                         msg.setFromUser(this.username);
                         try {
                             switch (msg.getCommand().toLowerCase(Locale.ROOT)) {
-                                case (REGISTRATION) -> {
+                                case (Message.REGISTRATION) -> {
                                     if (this.isRegistered()) {
                                         Message result = Message.serverMessage("You are already registered.");
                                         result.setToUser(this.getUsername());
+                                        result.setCommand(Message.REGISTRATION);
                                         this.sendMsgToClient(result);
                                         break;
                                     }
@@ -63,27 +56,32 @@ public class ChatServerObj {
                                         result.setToUser(this.getUsername());
                                         this.sendMsgToClient(result);
                                     } else {
-                                        this.sendMsgToClient(Message.serverMessage("Error! Please, try again."));
+                                        Message result = Message.serverMessage("Error! Please, try again.");
+                                        result.setCommand(Message.REGISTRATION);
+                                        this.sendMsgToClient(result);
                                     }
                                 }
-                                case (GROUP) -> {
+                                case (Message.GROUP) -> {
                                     if (!this.isRegistered()) {
                                         Message result = Message.serverMessage("Permitted! You are not registered.");
+                                        result.setCommand(Message.REFUSED);
                                         this.sendMsgToClient(result);
                                         break;
                                     }
                                     groupChat(msg);
                                 }
-                                case (WHISPER) -> {
+                                case (Message.WHISPER) -> {
                                     if (!this.isRegistered()) {
                                         Message result = Message.serverMessage("Permitted! You are not registered.");
                                         result.setToUser(this.username);
+                                        result.setCommand(Message.REFUSED);
                                         this.sendMsgToClient(result);
                                         break;
                                     }
                                     if (msg.getToUser().equalsIgnoreCase(this.username)) {
                                         Message result = Message.serverMessage("Stop it.");
                                         result.setToUser(this.username);
+                                        result.setCommand(Message.REFUSED);
                                         sendMsgToClient(result);
                                         break;
                                     }
@@ -91,13 +89,14 @@ public class ChatServerObj {
                                     if (toClient == null) {
                                         Message result = Message.serverMessage("Can't find such user.");
                                         result.setToUser(this.username);
+                                        result.setCommand(Message.REFUSED);
                                         this.sendMsgToClient(result);
                                         break;
                                     }
                                     toClient.sendMsgToClient(msg);
                                     sendMsgToClient(msg);
                                 }
-                                case (QUIT) -> {
+                                case (Message.QUIT) -> {
                                     Message resultToUser = Message.serverMessage("You're going to be disconnected.");
                                     resultToUser.setToUser(this.username);
                                     this.sendMsgToClient(resultToUser);
@@ -110,68 +109,74 @@ public class ChatServerObj {
                                         groupChat(resultToChat);
                                     }
                                 }
-                                case (USERS) -> {
+                                case (Message.USERS) -> {
                                     Message result = Message.serverMessage(getAllUsernames());
                                     result.setToUser(this.username);
+                                    result.setCommand(Message.USERS);
                                     this.sendMsgToClient(result);
                                 }
-                                case (FILES) -> {
+                                case (Message.FILES) -> {
                                     if (!this.isRegistered()) {
                                         Message result = Message.serverMessage("Permitted! You are not registered.");
+                                        result.setCommand(Message.REFUSED);
                                         this.sendMsgToClient(result);
                                         break;
                                     }
                                     Message result = Message.serverMessage(FileServer.getFileList());
                                     result.setToUser(this.username);
+                                    result.setCommand(Message.FILES);
                                     sendMsgToClient(result);
                                 }
-                                case (DOWNLOAD) -> {
+                                case (Message.DOWNLOAD) -> {
                                     if (!this.isRegistered()) {
                                         Message result = Message.serverMessage("Permitted! You are not registered.");
+                                        result.setCommand(Message.REFUSED);
                                         this.sendMsgToClient(result);
                                         break;
                                     }
                                     if (FileServer.checkFiles(msg.getContent(), true)) {
                                         Message result = Message.serverMessage(msg.getContent());
-                                        result.setCommand(DOWNLOAD);
+                                        result.setCommand(Message.DOWNLOAD);
                                         result.setToUser(this.username);
                                         result.setSystem(true);
                                         this.sendMsgToClient(result);
                                     } else {
                                         Message result = Message.serverMessage(null);
-                                        result.setCommand(REFUSED);
+                                        result.setCommand(Message.REFUSED);
                                         result.setToUser(this.username);
                                         result.setSystem(true);
                                         this.sendMsgToClient(result);
                                     }
                                 }
-                                case (UPLOAD) -> {
+                                case (Message.UPLOAD) -> {
                                     if (!this.isRegistered()) {
                                         Message result = Message.serverMessage("Permitted! You are not registered.");
+                                        result.setCommand(Message.REFUSED);
                                         this.sendMsgToClient(result);
                                         break;
                                     }
                                     if (FileServer.checkFiles(msg.getContent(), false)) {
                                         Message result = Message.serverMessage(msg.getContent());
-                                        result.setCommand(UPLOAD);
+                                        result.setCommand(Message.UPLOAD);
                                         result.setToUser(this.username);
                                         result.setSystem(true);
                                         this.sendMsgToClient(result);
                                     } else {
                                         Message result = Message.serverMessage(null);
-                                        result.setCommand(REFUSED);
+                                        result.setCommand(Message.REFUSED);
                                         result.setToUser(this.username);
                                         result.setSystem(true);
                                         this.sendMsgToClient(result);
                                     }
                                 }
+                                case (Message.COMMANDS) -> this.sendMsgToClient(welcomeMsg());
                                 default -> {
                                     throw new IllegalArgumentException("No such command.");
-
                                 }
                             }
                         } catch (Exception e) {
                             Message result = Message.serverMessage("Error occurred on server - " + e.getMessage());
+                            result.setCommand(Message.REFUSED);
                             result.setToUser(this.username);
                             this.sendMsgToClient(result);
                         }
@@ -193,7 +198,6 @@ public class ChatServerObj {
         //        DONE methods
         public Message welcomeMsg(){
             String welcome = new String("""
-                    Welcome! Register, please!
                     Commands are:
                     /register <username> - registration
                     /g <content> - group chat
@@ -204,7 +208,9 @@ public class ChatServerObj {
                     /download <filename> - download file
                     /q - quit chat
                     """);
-            return Message.serverMessage(welcome);
+            Message result = Message.serverMessage(welcome);
+            result.setCommand(Message.COMMANDS);
+            return result;
         }
 
         public boolean isRegistered(){
@@ -308,5 +314,29 @@ public class ChatServerObj {
                 }
             }
         }
+
+
+//        final byte[] ip;
+//        try {
+//            ip = InetAddress.getLocalHost().getAddress();
+//        } catch (Exception e) {
+//            return;     // exit method, otherwise "ip might not have been initialized"
+//        }
+//
+//        for(int i=1;i<=254;i++) {
+//            final int j = i;  // i as non-final variable cannot be referenced from inner class
+//            new Thread(new Runnable() {   // new thread for parallel execution
+//                public void run() {
+//                    try {
+//                        ip[3] = (byte)j;
+//                        InetAddress address = InetAddress.getByAddress(ip);
+//                        String output = address.toString().substring(1);
+//                        if (address.isReachable(5000)) {
+//                            System.out.println(output + " is on the network");
+//                        }
+//                    } catch (Exception e) {}
+//                }
+//            }).start();     // dont forget to start the thread
+//        }
     }
 }

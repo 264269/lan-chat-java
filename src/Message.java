@@ -3,6 +3,16 @@ import java.util.Locale;
 import java.util.regex.Pattern;
 
 public class Message implements Serializable {
+    public static final String REGISTRATION = "/register";
+    public static final String GROUP = "/g";
+    public static final String WHISPER = "/w";
+    public static final String QUIT = "/q";
+    public static final String USERS = "/users";
+    public static final String DOWNLOAD = "/download";
+    public static final String UPLOAD = "/upload";
+    public static final String FILES = "/files";
+    public static final String REFUSED = "refused";
+    public static final String COMMANDS = "/commands";
 //    fields
     private boolean system;
     private String command;
@@ -61,19 +71,19 @@ public class Message implements Serializable {
 
         switch (result.getCommand().toLowerCase(Locale.ROOT)) {
 
-            case (ChatServerObj.ClientHandler.REGISTRATION) -> {
+            case (REGISTRATION) -> {
                 if (result.getContent().isBlank()) {
                     throw new IllegalArgumentException("Stop it.");
                 }
             }
 
-            case (ChatServerObj.ClientHandler.GROUP), (ChatServerObj.ClientHandler.UPLOAD), (ChatServerObj.ClientHandler.DOWNLOAD) -> {
+            case (GROUP), (UPLOAD), (DOWNLOAD) -> {
                 if (result.getContent() == null || result.getContent().isBlank() || result.getContent().isEmpty()) {
                     throw new IllegalArgumentException("Permitted! No content.");
                 }
             }
 
-            case (ChatServerObj.ClientHandler.WHISPER) -> {
+            case (WHISPER) -> {
                 if (result.getContent().split("\s+").length < 2 || result.getContent().isBlank() || result.getContent().isEmpty()) {
                     throw new IllegalArgumentException("Permitted! Missing username/content.");
                 }
@@ -81,7 +91,7 @@ public class Message implements Serializable {
                 result.setContent(result.content.replaceFirst(result.toUser, "").replaceFirst("\s+", ""));
             }
 
-            case (ChatServerObj.ClientHandler.QUIT), (ChatServerObj.ClientHandler.USERS), (ChatServerObj.ClientHandler.FILES) -> {}
+            case (QUIT), (USERS), (FILES), (COMMANDS) -> {}
 
             default -> throw new IllegalArgumentException("There's no such command!");
         }
