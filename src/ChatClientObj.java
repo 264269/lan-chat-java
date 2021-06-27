@@ -13,6 +13,7 @@ public class ChatClientObj {
     private static final String sourceDir = Paths.get("").toAbsolutePath().toString() + "\\files";
     private static final String historyDir = Paths.get("").toAbsolutePath().toString() + "\\history";
     private static final String historyFile = historyDir + "\\history.txt";
+    private static String ip;
     private static Socket client;
     private static BufferedReader sysIn;
     private static ObjectOutputStream out;
@@ -57,7 +58,7 @@ public class ChatClientObj {
         private static void executeCommand(Message msg) {
             if (!msg.getCommand().equalsIgnoreCase(Message.REFUSED)) {
                 try {
-                    Socket fileSocket = new Socket("localhost", 4004);
+                    Socket fileSocket = new Socket(ip, 4004);
                     FileServerEntry fsEntry;
                     if (msg.getCommand().equalsIgnoreCase(Message.UPLOAD)) {
                         fsEntry = FileServerEntry.uploadRequest(msg.getContent());
@@ -174,7 +175,6 @@ public class ChatClientObj {
             } catch (IOException | ClassNotFoundException e) {
                 e.printStackTrace();
             }
-            System.out.println("File thread died!");
         }
 
         private void initializeTransfer() throws IOException, ClassNotFoundException {
@@ -274,15 +274,14 @@ public class ChatClientObj {
         try {
             sysIn = new BufferedReader(new InputStreamReader(System.in));
             System.out.println("Enter server's ip to connect to chat (type \"/q\" to close client):");
-            String msg;
-            while ((msg = sysIn.readLine()) != null) {
-                if (msg.equalsIgnoreCase(Message.QUIT)) {
+            while ((ip = sysIn.readLine()) != null) {
+                if (ip.equalsIgnoreCase(Message.QUIT)) {
                     System.out.println("Bye!");
                     return;
                 }
                 try {
-                    System.out.println("Connecting to server.");
-                    client = new Socket(msg,6666);
+                    System.out.println("Connecting to server...");
+                    client = new Socket(ip,6666);
                     System.out.println("Connected.");
                     BufferedReader check =  new BufferedReader(new InputStreamReader(client.getInputStream()));
                     if (check.readLine().equalsIgnoreCase(Message.REFUSED)) {
