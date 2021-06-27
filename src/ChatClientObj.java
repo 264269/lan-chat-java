@@ -1,7 +1,9 @@
 import java.io.*;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.rmi.ServerException;
 import java.sql.Time;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -16,6 +18,7 @@ public class ChatClientObj {
     private static ObjectOutputStream out;
     private static ObjectInputStream in;
     private static volatile boolean runFlag = true;
+
 
     private static class FromServer extends Thread{
         public FromServer(){
@@ -91,6 +94,7 @@ public class ChatClientObj {
         }
     }
 
+
     private static class ToServer extends Thread{
         public ToServer(){
             start();
@@ -129,6 +133,7 @@ public class ChatClientObj {
             }
         }
     }
+
 
     private static class FileConnection extends Thread {
         private final String filename;
@@ -218,6 +223,7 @@ public class ChatClientObj {
         }
     }
 
+
     private static String parseMessage(Message msg) {
         return msg.getFromUser() + " -> " + msg.getToUser() + ": " + msg.getContent();
     }
@@ -264,11 +270,34 @@ public class ChatClientObj {
         fromHistory.close();
     }
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) {
         try {
-            try{
-                System.out.println("Connecting to server.");
-                client = new Socket("localhost",6666);
+            sysIn = new BufferedReader(new InputStreamReader(System.in));
+            System.out.println("Enter server's ip to connect to chat (type \"/q\" to close client):");
+            String msg;
+            while ((msg = sysIn.readLine()) != null) {
+                if (msg.equalsIgnoreCase(Message.QUIT)) {
+                    System.out.println("Bye!");
+                    return;
+                }
+                try {
+                    System.out.println("Connecting to server.");
+                    client = new Socket(msg,6666);
+                    System.out.println("Connected.");
+                    BufferedReader check =  new BufferedReader(new InputStreamReader(client.getInputStream()));
+                    if (check.readLine().equalsIgnoreCase(Message.REFUSED)) {
+                        check.close();
+                        client.close();
+                        client = null;
+                        throw new SocketException();
+                    }
+                } catch (SocketException e) {
+                    System.out.println("Can't connect to server.");
+                }
+                if (client != null)
+                    break;
+            }
+            try {
                 System.out.println("Connected successfully!");
                 try {
                     revealHistory();
@@ -277,7 +306,6 @@ public class ChatClientObj {
                 }
                 out = new ObjectOutputStream(client.getOutputStream());
                 in = new ObjectInputStream(client.getInputStream());
-                sysIn = new BufferedReader(new InputStreamReader(System.in));
                 FromServer fromServer = new FromServer();
                 ToServer toServer = new ToServer();
                 toServer.join();

@@ -1,11 +1,14 @@
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.file.Paths;
 import java.util.LinkedList;
+import java.util.concurrent.TimeoutException;
 
 public class FileServer extends Thread {
     public static final String sourceDir = Paths.get("").toAbsolutePath().toString() + "\\sources";
+    boolean runFlag = true;
 
     private final int fileServerPort;
 
@@ -116,21 +119,24 @@ public class FileServer extends Thread {
     @Override
     public void run() {
         try (ServerSocket fileServerSocket = new ServerSocket(fileServerPort, 4)) {
-            while (true) {
-                clearFileServer();
-                System.out.println("File server is open for a new connection.");
-                Socket fileSocket = fileServerSocket.accept();
-                System.out.println("File server accepted connection.");
+            fileServerSocket.setSoTimeout(60000);
+            while (runFlag) {
                 try {
-                    System.out.println("Trying to launch a file thread.");
-                    fileSocketList.add(new FileHandler(fileSocket));
-                    System.out.println("File server is ready to work with new client.");
-                } catch (IOException e) {
-                    System.out.println("Something went wrong, closing connection.");
-                    fileSocket.close();
-                } catch (ClassNotFoundException e) {
-                    e.printStackTrace();
-                }
+                    clearFileServer();
+                    System.out.println("File server is open for a new connection.");
+                    Socket fileSocket = fileServerSocket.accept();
+                    System.out.println("File server accepted connection.");
+                    try {
+                        System.out.println("Trying to launch a file thread.");
+                        fileSocketList.add(new FileHandler(fileSocket));
+                        System.out.println("File server is ready to work with new client.");
+                    } catch (IOException e) {
+                        System.out.println("Something went wrong, closing connection.");
+                        fileSocket.close();
+                    } catch (ClassNotFoundException e) {
+                        e.printStackTrace();
+                    }
+                } catch (SocketTimeoutException e) {}
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -172,5 +178,8 @@ public class FileServer extends Thread {
             fileList.append(file.getName());
         }
         return fileList.toString();
+    }
+    public void exit() {
+        runFlag = false;
     }
 }

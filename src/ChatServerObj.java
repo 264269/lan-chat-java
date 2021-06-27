@@ -6,9 +6,11 @@ import java.util.regex.Pattern;
 
 
 public class ChatServerObj {
+    static NetworkInterface networkInterface = null;
 
     //    client list
     private static LinkedList<ClientHandler> clientList = new LinkedList<>();
+
 
     static class ClientHandler extends Thread {
         //        some fields
@@ -226,7 +228,11 @@ public class ChatServerObj {
         }
 
         public int getPort() {
+//            client.getInetAddress();
             return client.getPort();
+        }
+        public String getIP() {
+            return client.getInetAddress().getHostAddress();
         }
 
         public boolean registerUser(String name){
@@ -284,6 +290,7 @@ public class ChatServerObj {
 
     }
 
+
     private static void deleteClient(int deleteClientPort) {
         if (clientList.removeIf(client -> client.getPort() == deleteClientPort)) {
             System.out.println("Client with port " + deleteClientPort + " was deleted.");
@@ -291,52 +298,159 @@ public class ChatServerObj {
             System.out.println("Client wasn't deleted.");
         }
     }
+
     private static void clearServer(){
         clientList.removeIf(ClientHandler::isClosed);
     }
 
-    public static void main(String[] args) throws IOException {
-        int serverPort = 6666;
-        FileServer fileServer = new FileServer(4004);
-        try (ServerSocket serverSocket = new ServerSocket(serverPort, 10)) {
-            while (true) {
-                clearServer();
-                System.out.println("Server is open for a new connection.");
-                Socket clientSocket = serverSocket.accept();
-                System.out.println("Connection accepted.");
-                try {
-                    System.out.println("Trying to launch a thread.");
-                    clientList.add(new ClientHandler(clientSocket));
-                    System.out.println("Server is ready to work with new client.");
-                } catch (IOException e) {
-                    System.out.println("Something went wrong, closing connection.");
-                    clientSocket.close();
+
+    private static class ClientAcceptance extends Thread {
+        int serverPort;
+        int filePort;
+        boolean runFlag = true;
+        FileServer fileServer;
+        public ClientAcceptance(int port1, int port2) {
+            serverPort = port1;
+            filePort = port2;
+            start();
+        }
+        @Override
+        public void run() {
+            fileServer = new FileServer(filePort);
+            try (ServerSocket serverSocket = new ServerSocket(serverPort, 10)) {
+                serverSocket.setSoTimeout(60000);
+                while (runFlag) {
+                    try {
+                        clearServer();
+                        System.out.println("Server is open for a new connection.");
+                        Socket clientSocket = serverSocket.accept();
+                        BufferedWriter out = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream()));
+                        System.out.println(clientSocket.getInetAddress().getHostAddress());
+                        Integer[] clientIP = getIP(clientSocket.getInetAddress().getAddress());
+                        Integer[] prefix = getPrefix(networkInterface.getInterfaceAddresses().get(0).getNetworkPrefixLength());
+                        Integer[] serverIP = getIP(networkInterface.getInterfaceAddresses().get(0).getAddress().getAddress());
+                        boolean lanFlag = true;
+                        for (int i = 0; i < 4; i++) {
+                            if ((clientIP[i] & prefix[i]) != (serverIP[i] & prefix[i])) {
+                                System.out.println("Connection from other LAN, closing connection.");
+                                out.write(Message.REFUSED + "\n");
+                                out.flush();
+                                out.close();
+                                clientSocket.close();
+                                lanFlag = false;
+                                break;
+                            }
+                        }
+                        if (lanFlag) {
+                            System.out.println("Connection accepted.");
+                            out.write("yo\n");
+                            out.flush();
+                            try {
+                                System.out.println("Trying to launch a thread.");
+                                clientList.add(new ClientHandler(clientSocket));
+                                System.out.println("Server is ready to work with new client.");
+                            } catch (IOException e) {
+                                System.out.println("Something went wrong, closing connection.");
+                                clientSocket.close();
+                            }
+                        }
+                    } catch (SocketTimeoutException e) {}
                 }
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
 
+        static Integer[] getPrefix(short prefix) {
+            StringBuilder[] temp = new StringBuilder[4];
+            for (int i = 0; i < 4; i++) {
+                temp[i] = new StringBuilder();
+            }
+            for (int i = 0; i < 32; i++) {
+                int index = i / 8;
+                if (i < prefix) {
+                    temp[index].append("1");
+                } else {
+                    temp[index].append("0");
+                }
+            }
+            Integer[] result = new Integer[4];
+            for (int i = 0; i < 4; i++) {
+                result[i] = Integer.parseInt(temp[i].toString(), 2);
+            }
+            return result;
+        }
 
-//        final byte[] ip;
-//        try {
-//            ip = InetAddress.getLocalHost().getAddress();
-//        } catch (Exception e) {
-//            return;     // exit method, otherwise "ip might not have been initialized"
-//        }
-//
-//        for(int i=1;i<=254;i++) {
-//            final int j = i;  // i as non-final variable cannot be referenced from inner class
-//            new Thread(new Runnable() {   // new thread for parallel execution
-//                public void run() {
-//                    try {
-//                        ip[3] = (byte)j;
-//                        InetAddress address = InetAddress.getByAddress(ip);
-//                        String output = address.toString().substring(1);
-//                        if (address.isReachable(5000)) {
-//                            System.out.println(output + " is on the network");
-//                        }
-//                    } catch (Exception e) {}
-//                }
-//            }).start();     // dont forget to start the thread
-//        }
+        static Integer[] getIP(byte[] ip) {
+            Integer[] result = new Integer[4];
+            for (int i = 0; i < 4; i++) {
+                if (ip[i] < 0)
+                    result[i] = 256 + ip[i];
+                else
+                    result[i] = (int) ip[i];
+            }
+            return result;
+        }
+
+        public void exit() {
+            runFlag = false;
+            fileServer.exit();
+        }
+    }
+
+
+    static void displayInterfaceInformation(NetworkInterface netint) throws SocketException {
+        System.out.printf("Display name: %s\n", netint.getDisplayName());
+        System.out.printf("Name: %s\n", netint.getName());
+        Enumeration<InetAddress> inetAddresses = netint.getInetAddresses();
+        for (InetAddress inetAddress : Collections.list(inetAddresses)) {
+            if (inetAddress.getAddress().length == 4)
+                System.out.println("InetAddress: " + inetAddress + "/" + netint.getInterfaceAddresses().get(0).getNetworkPrefixLength());
+        }
+        System.out.println();
+    }
+
+    public static void main(String[] args) throws IOException {
+        ArrayList<NetworkInterface> nets = new ArrayList<>();
+        for (NetworkInterface netint : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+            for (InetAddress inetAddress : Collections.list(netint.getInetAddresses())) {
+                if (inetAddress.getAddress().length == 4) {
+                    nets.add(netint);
+                }
+            }
+        }
+        System.out.println("You can currently host in " + nets.size() + " networks:\n");
+        for (NetworkInterface netint : nets) {
+            displayInterfaceInformation(netint);
+        }
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        System.out.println("Choose network to host (enter interface name):");
+        String msg;
+        while ((msg = br.readLine()) != null) {
+            if (msg.equalsIgnoreCase(Message.QUIT)) {
+                System.out.println("Bye!");
+                return;
+            }
+            for (NetworkInterface netint : nets)
+                if (netint.getName().equalsIgnoreCase(msg)) {
+                    System.out.println("Network chosen successfully!");
+                    networkInterface = netint;
+                    break;
+                }
+            if (networkInterface != null)
+                break;
+            System.out.println("Can't find such interface!");
+        }
+        ClientAcceptance clientAcceptance = new ClientAcceptance(6666, 4004);
+        String sysMsg;
+        while (true) {
+            BufferedReader sys = new BufferedReader(new InputStreamReader(System.in));
+            sysMsg = sys.readLine();
+            if (sysMsg.equalsIgnoreCase(Message.QUIT)) {
+                System.out.println(sysMsg);
+                break;
+            }
+        }
+        clientAcceptance.exit();
     }
 }
